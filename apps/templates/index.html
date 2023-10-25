@@ -16,6 +16,7 @@
         type="text/css" />
     <link rel="stylesheet" href="https://unpkg.com/mapbox-gl-draw/dist/mapbox-gl-draw.css" />
     <script src="https://unpkg.com/mapbox-gl-draw/dist/mapbox-gl-draw.js"></script>
+    <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
 
     <style>
         body,
@@ -114,6 +115,14 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+        }
+
+        .custom-popup {
+            max-width: 150px;
+            max-height: 8px;
+            text-align: center;
+            font-weight: bold;
+            line-height: 0;
         }
     </style>
 </head>
@@ -280,139 +289,177 @@
             startMarkerButton.classList.add('active');
         });
 
-        mapsatreet.on('click', function (e) {
-            var coordinates = e.lngLat;
+        // Créez une fonction pour gérer le clic et ajouter un marqueur
+        function handleMapClick(map, event) {
+            var coordinates = event.lngLat;
             if (addingNewMarker) {
                 var markerName = prompt('Entrez le nom du marqueur:');
                 if (markerName) {
-                    addLocationMarker(mapsatreet, coordinates, markerName);
+                    addLocationMarker(map, coordinates, markerName);
                 }
                 addingNewMarker = false;
                 startMarkerButton.classList.remove('active');
             }
+        }
+
+        // Ajoutez le gestionnaire de clic aux trois cartes
+        mapsatreet.on('click', function (e) {
+            handleMapClick(mapsatreet, e);
         });
 
         mapdark.on('click', function (e) {
-            var coordinates = e.lngLat;
-            if (addingNewMarker) {
-                var markerName = prompt('Entrez le nom du marqueur:');
-                if (markerName) {
-                    addLocationMarker(mapdark, coordinates, markerName);
-                }
-                addingNewMarker = false;
-                startMarkerButton.classList.remove('active');
-            }
+            handleMapClick(mapdark, e);
         });
 
         mapnorm.on('click', function (e) {
-            var coordinates = e.lngLat;
-            if (addingNewMarker) {
-                var markerName = prompt('Entrez le nom du marqueur:');
-                if (markerName) {
-                    addLocationMarker(mapnorm, coordinates, markerName);
+            handleMapClick(mapnorm, e);
+        });
+
+        let popupData = {}; // Un objet pour stocker les popups associés à chaque polygone et carte
+
+        function createPolygonHandler(map) {
+            map.on('draw.create', function (e) {
+                var polygon = e.features[0];
+                var coordinates = polygon.geometry.coordinates[0];
+                console.log('Coordonnées du polygone:', coordinates);
+
+                // Récupérez l'identifiant généré pour la nouvelle fonctionnalité
+                var featureId = polygon.id;
+
+                // Demandez à l'utilisateur d'entrer le nom de la zone
+                var zoneName = prompt("Entrez le nom de la zone:");
+
+                if (zoneName) {
+                    // Mettez à jour la propriété zoneName de la fonctionnalité
+                    polygon.properties.zoneName = zoneName;
+
+                    // Mettez à jour la source avec la nouvelle fonctionnalité
+                    map.getSource('draw-polygon').setData({
+                        type: 'FeatureCollection',
+                        features: [polygon]
+                    });
+
+                    // Calculer le point central du polygone
+                    var center = turf.centerOfMass(polygon);
+
+                    console.log('long:', center.geometry.coordinates[0]);
+                    console.log('lat:', center.geometry.coordinates[1]);
+
+                    // Utilisez les coordonnées du centre converties avec setLngLat
+                    var popup = new mapboxgl.Popup({
+                        closeOnClick: false,
+                        closeButton: false,
+                    })
+                        .setLngLat(center.geometry.coordinates) // Utilisez les coordonnées du centre converties
+                        .setHTML('<strong>' + zoneName + '</strong>')
+                        .addTo(map);
+
+                    // Associez le popup au polygone en utilisant l'ID de la fonctionnalité
+                    popupData[featureId] = {
+                        polygon: polygon,
+                        popup: popup,
+                        map: map
+                    };
+
+                    popup._content.classList.add('custom-popup');
                 }
-                addingNewMarker = false;
-                startMarkerButton.classList.remove('active');
-            }
-        });
+            });
+        }
 
-        mapsatreet.on('draw.create', function (e) {
-            var polygon = e.features[0];
-            var coordinates = polygon.geometry.coordinates[0];
-            console.log('Coordonnées du polygone:', coordinates);
-        });
-
-        mapsatreet.on('draw.modechange', function (event) {
-            isDrawing = event.mode.startsWith('draw');  // Si le mode commence par 'draw', on est en train de dessiner
-        });
-
-        mapdark.on('draw.create', function (e) {
-            var polygon = e.features[0];
-            var coordinates = polygon.geometry.coordinates[0];
-            console.log('Coordonnées du polygone:', coordinates);
-        });
-
-        
-
-        mapdark.on('draw.modechange', function (event) {
-            isDrawing = event.mode.startsWith('draw');  // Si le mode commence par 'draw', on est en train de dessiner
-        });
-
-        mapnorm.on('draw.create', function (e) {
-            var polygon = e.features[0];
-            var coordinates = polygon.geometry.coordinates[0];
-            console.log('Coordonnées du polygone:', coordinates);
-        });
-
-        mapnorm.on('draw.modechange', function (event) {
-            isDrawing = event.mode.startsWith('draw');  // Si le mode commence par 'draw', on est en train de dessiner
-        });
+        // Utilisez la fonction de gestion commune pour les trois cartes
+        createPolygonHandler(mapsatreet);
+        createPolygonHandler(mapdark);
+        createPolygonHandler(mapnorm);
 
 
 
+        function setupDrawModeChangeHandler(map) {
+            map.on('draw.modechange', function (event) {
+                isDrawing = event.mode.startsWith('draw');  // Si le mode commence par 'draw', on est en train de dessiner
+            });
+        }
 
-
-        var draw = new MapboxDraw({
-            displayControlsDefault: false,
-            controls: {
-                polygon: true,
-                trash: true
-            }
-        });
-
-        var drawBur = new MapboxDraw({
-            displayControlsDefault: false,
-            controls: {
-                polygon: true,
-                trash: true
-            }
-        });
-
-        var drawGui = new MapboxDraw({
-            displayControlsDefault: false,
-            controls: {
-                polygon: true,
-                trash: true
-            }
-        });
+        // Utilisez la fonction générique pour les trois cartes
+        setupDrawModeChangeHandler(mapsatreet);
+        setupDrawModeChangeHandler(mapdark);
+        setupDrawModeChangeHandler(mapnorm);
 
 
 
+        function createMapboxDraw(map) {
+            return new MapboxDraw({
+                displayControlsDefault: false,
+                controls: {
+                    polygon: true,
+                    trash: true
+                }
+            });
+        }
+
+        // Créez des instances de MapboxDraw pour les trois cartes
+        var draw = createMapboxDraw(mapsatreet);
+        var drawBur = createMapboxDraw(mapdark);
+        var drawGui = createMapboxDraw(mapnorm);
+
+        // Ajoutez les instances de MapboxDraw aux cartes
         mapsatreet.addControl(draw, 'top-left');
         mapdark.addControl(drawBur, 'top-left');
         mapnorm.addControl(drawGui, 'top-left');
 
 
-        mapsatreet.addSource('draw-polygon', {
-            type: 'geojson',
-            data: {
-                type: 'FeatureCollection',
-                features: []
-            }
+
+        function addDrawLayerToMap(map) {
+            map.on('load', function () {
+                map.addSource('draw-polygon', {
+                    type: 'geojson',
+                    data: {
+                        type: 'FeatureCollection',
+                        features: []
+                    },
+                    generateId: true
+                });
+
+                map.addLayer({
+                    id: 'draw-polygon',
+                    type: 'fill',
+                    source: 'draw-polygon',
+                    layout: {},
+                    paint: {
+                        'fill-color': '#87CEEB',
+                        'fill-opacity': 0.05
+                    }
+                });
+            });
+        }
+
+        // Utilisez la fonction générique pour ajouter la source et la couche à chaque carte
+        addDrawLayerToMap(mapsatreet);
+        addDrawLayerToMap(mapdark);
+        addDrawLayerToMap(mapnorm);
+
+
+        // Fonction générique pour gérer les mises à jour de polygone
+        function handleDrawUpdate(map, e) {
+            updatePolygon(map, e);
+        }
+
+        // Liste des cartes
+        var maps = [mapsatreet, mapdark, mapnorm];
+
+        // Ajoutez des gestionnaires d'événements génériques pour toutes les cartes
+        maps.forEach(function (map) {
+            map.on('draw.update', function (e) {
+                handleDrawUpdate(map, e);
+            });
         });
 
-        mapsatreet.addLayer({
-            id: 'draw-polygon',
-            type: 'fill',
-            source: 'draw-polygon',
-            layout: {},
-            paint: {
-                'fill-color': '#FF0000',
-                'fill-opacity': 0.4
-            }
-        });
 
-        mapsatreet.on('draw.create', updatePolygon);
-        mapsatreet.on('draw.update', updatePolygon);
 
-        mapdark.on('draw.create', updatePolygon);
-        mapdark.on('draw.update', updatePolygon);
+        /*function updatePolygon(e) {
 
-        mapnorm.on('draw.create', updatePolygon);
-        mapnorm.on('draw.update', updatePolygon);
-
-        function updatePolygon(e) {
+            console.log('Hello...');
             var features = draw.getAll();
+            console.log('Hfeature:', features.features.length);
             if (features.features.length > 0) {
                 var coordinates = features.features[0].geometry.coordinates;
                 mapsatreet.getSource('draw-polygon').setData({
@@ -423,7 +470,125 @@
                     }
                 });
             }
+        }*/
+
+        function updatePolygon(map, e) {
+            console.log('Hello...');
+            var coordinates = e.features[0].geometry.coordinates;
+            map.getSource('draw-polygon').setData({
+                type: 'Feature',
+                geometry: {
+                    type: 'Polygon',
+                    coordinates: coordinates
+                }
+            });
         }
+
+
+
+        // Code pour créer une boîte de dialogue
+
+
+        /*mapsatreet.on('click', 'draw-polygon', function (e) {
+            var feature = e.features[0];
+            var zoneName = feature.properties.zoneName;
+
+            if (zoneName) {
+                new mapboxgl.Popup()
+                    .setLngLat(e.lngLat)
+                    .setHTML('Nom de la zone : ' + zoneName)
+                    .addTo(mapsatreet);
+
+                console.log('lnglat:', e.lngLat)
+            } else {
+                // Si la propriété zoneName n'est pas définie, demandez à l'utilisateur de la saisir.
+                zoneName = prompt("Entrez le nom de la zone:");
+                if (zoneName) {
+                    feature.properties.zoneName = zoneName;
+
+                    // Mettez à jour la source 'draw-polygon' en spécifiant uniquement la fonctionnalité modifiée
+                    mapsatreet.getSource('draw-polygon').setData({
+                        type: 'FeatureCollection',
+                        features: [feature]
+                    });
+                }
+            }
+        });
+
+
+
+
+
+        // Code pour afficher le nom de la zone au-dessus du polygone
+
+
+        mapsatreet.on('mouseenter', 'draw-polygon', function (e) {
+            var feature = e.features[0];
+            var zoneName = feature.properties.zoneName;
+            console.log('encore:', zoneName)
+            if (zoneName) {
+                mapsatreet.getCanvas().style.cursor = 'pointer';
+            }
+        });
+
+
+
+        mapsatreet.on('mouseleave', 'draw-polygon', function () {
+            mapsatreet.getCanvas().style.cursor = '';
+        });*/
+
+
+        function removePolygonLayer(map) {
+            var features = map.querySourceFeatures('draw-polygon');
+
+            features.forEach(function (feature) {
+                var featureId = feature.id;
+                if (popupData.hasOwnProperty(featureId)) {
+                    var popupInfo = popupData[featureId];
+                    var popup = popupInfo.popup;
+                    popup.remove();
+                    // Supprimez le popup du stockage
+                    delete popupData[featureId];
+                }
+            });
+
+            // Supprimez la couche
+            map.removeLayer('draw-polygon');
+
+            // Supprimez la source de données
+            map.removeSource('draw-polygon');
+
+            // Réinitialisez la source de données
+            map.addSource('draw-polygon', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: []
+                }
+            });
+
+            // Ajoutez à nouveau la couche vide à partir de la source de données réinitialisée
+            map.addLayer({
+                id: 'draw-polygon',
+                type: 'fill',
+                source: 'draw-polygon',
+                layout: {},
+                paint: {
+                    'fill-color': '#87CEEB',
+                    'fill-opacity': 0.2
+                }
+            });
+        }
+
+        // Maintenant, vous pouvez utiliser cette fonction pour toutes les cartes sans redondance
+        maps.forEach((map) => {
+            map.on('draw.delete', function () {
+                removePolygonLayer(map);
+            });
+        });
+
+
+
     </script>
 
 </body>
