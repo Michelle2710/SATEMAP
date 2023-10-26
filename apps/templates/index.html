@@ -89,7 +89,7 @@
         }
 
         .marker-container {
-            position: relative;
+            position: absolute;
             display: inline-block;
         }
 
@@ -98,6 +98,7 @@
             height: 15px;
             /* Changez la couleur selon vos besoins */
             border-radius: 50%;
+            position: absolute;
             /* Rend le marqueur circulaire */
         }
 
@@ -117,12 +118,28 @@
             transform: translate(-50%, -50%);
         }
 
+
+
         .custom-popup {
             max-width: 150px;
             max-height: 8px;
             text-align: center;
             font-weight: bold;
             line-height: 0;
+            background-color: black;
+            color: #fff;
+
+        }
+
+        .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
+            border-top-color: black;
+        }
+
+        /* Empêchez les marqueurs de se déplacer lors du dézoom */
+        #mapsatreet .small-marker,
+        #mapdark .small-marker,
+        #mapnorm .small-marker {
+            position: absolute !important;
         }
     </style>
 </head>
@@ -317,6 +334,13 @@
 
         let popupData = {}; // Un objet pour stocker les popups associés à chaque polygone et carte
 
+        let polygonCounter = 0; // Initialisez un compteur pour les IDs des polygones
+
+        function createUniquePolygonId() {
+            polygonCounter++;
+            return 'polygon-' + polygonCounter; // Créez un ID unique basé sur le compteur
+        }
+
         function createPolygonHandler(map) {
             map.on('draw.create', function (e) {
                 var polygon = e.features[0];
@@ -324,7 +348,7 @@
                 console.log('Coordonnées du polygone:', coordinates);
 
                 // Récupérez l'identifiant généré pour la nouvelle fonctionnalité
-                var featureId = polygon.id;
+                var featureId = createUniquePolygonId();
 
                 // Demandez à l'utilisateur d'entrer le nom de la zone
                 var zoneName = prompt("Entrez le nom de la zone:");
@@ -355,13 +379,16 @@
                         .addTo(map);
 
                     // Associez le popup au polygone en utilisant l'ID de la fonctionnalité
+                    console.log('log(featureId)', featureId)
                     popupData[featureId] = {
                         polygon: polygon,
                         popup: popup,
                         map: map
                     };
+                    console.log('log(popupData)', popupData)
 
                     popup._content.classList.add('custom-popup');
+
                 }
             });
         }
@@ -537,20 +564,58 @@
             mapsatreet.getCanvas().style.cursor = '';
         });*/
 
+       /* maps.forEach((map) => {
+            /*map.on('draw.delete', function () {
+                removePolygonLayer(map);
+            });*/
 
-        function removePolygonLayer(map) {
-            var features = map.querySourceFeatures('draw-polygon');
-
-            features.forEach(function (feature) {
-                var featureId = feature.id;
-                if (popupData.hasOwnProperty(featureId)) {
-                    var popupInfo = popupData[featureId];
-                    var popup = popupInfo.popup;
-                    popup.remove();
-                    // Supprimez le popup du stockage
-                    delete popupData[featureId];
+            /*map.on('click', function (e) {
+                var features = map.queryRenderedFeatures(e.point, { layers: ['draw-polygon'] });
+                console.log('mich:', features)
+                if (features.length > 0) {
+                    var clickedPolygon = features[0];
+                    removePolygonLayer(map, clickedPolygon);
                 }
             });
+        });*/
+
+
+        map.on('click', function (e) {
+            var features = map.queryRenderedFeatures(e.point, { layers: ['draw-polygon'] });
+            if (features.length > 0) {
+                var clickedPolygon = features[0];
+                removePolygonLayer(map, clickedPolygon);
+            }
+        });
+
+
+
+        /*function removePolygonLayer(map, clickedPolygon) {
+            console.log('iiiidd:', clickedPolygon)
+            var clickedPolygonId = clickedPolygon.id;
+
+            console.log('iiiidd:', clickedPolygon)
+            var clickedPolygonCoordinates = clickedPolygon.geometry.coordinates;
+
+            for (var featureId in popupData) {
+                if (popupData.hasOwnProperty(featureId) && featureId !== clickedPolygonId) {
+                    var popupInfo = popupData[featureId];
+                    var popup = popupInfo.popup;
+                    var popupCoordinates = popup.getLngLat();
+
+                    // Vérifiez si les coordonnées du popup sont à l'intérieur du polygone cliqué
+                    var isPopupInsidePolygon = turf.booleanPointInPolygon(
+                        [popupCoordinates.lng, popupCoordinates.lat],
+                        clickedPolygonCoordinates
+                    );
+
+                    if (isPopupInsidePolygon) {
+                        popup.remove();
+                        // Supprimez le popup du stockage
+                        delete popupData[featureId];
+                    }
+                }
+            }
 
             // Supprimez la couche
             map.removeLayer('draw-polygon');
@@ -578,7 +643,11 @@
                     'fill-opacity': 0.2
                 }
             });
-        }
+        }*/
+
+
+
+
 
         // Maintenant, vous pouvez utiliser cette fonction pour toutes les cartes sans redondance
         maps.forEach((map) => {
@@ -586,6 +655,31 @@
                 removePolygonLayer(map);
             });
         });
+
+
+        function MarkerZoomParam(map) {
+            map.on('zoom', function () {
+                var currentZoom = map.getZoom();
+                var markers = map.getCanvasContainer().querySelectorAll('.small-marker');
+
+                // Ajustez la taille en fonction du niveau de zoom
+                var markerSize = currentZoom < 8 ? 9 : 15;
+
+                markers.forEach(function (marker) {
+                    marker.style.width = markerSize + 'px';  // Ajustez la largeur du marqueur
+                    marker.style.height = markerSize + 'px';  // Ajustez la hauteur du marqueur
+                });
+            });
+        }
+
+        // Appel de la fonction pour chaque carte
+        MarkerZoomParam(mapsatreet);
+        MarkerZoomParam(mapdark);
+        MarkerZoomParam(mapnorm);
+
+
+
+
 
 
 
